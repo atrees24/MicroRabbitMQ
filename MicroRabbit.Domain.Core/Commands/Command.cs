@@ -1,11 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using MediatR;
 using MicroRabbit.Domain.Core.Events;
 
 namespace MicroRabbit.Domain.Core.Commands
 {
-    public abstract class Command : Message
+    public abstract class Command : Message, IRequest<Unit>
     {
         public DateTime Timestamp { get; protected set; }
 

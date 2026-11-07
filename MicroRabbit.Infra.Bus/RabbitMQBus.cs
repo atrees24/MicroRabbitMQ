@@ -3,6 +3,7 @@ using MicroRabbit.Domain.Core.Bus;
 using MicroRabbit.Domain.Core.Commands;
 using MicroRabbit.Domain.Core.Events;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System;
@@ -20,6 +21,7 @@ namespace MicroRabbit.Infra.Bus
         private readonly Dictionary<string, List<Type>> _handlers;
         private readonly Dictionary<string, Type> _eventTypes;
         private readonly IServiceScopeFactory _serviceScopeFactory;
+        private readonly RabbitMQSettings _settings;
 
         // Keep connections and channels alive while consumers are running
         private readonly List<IConnection> _connections = new();
@@ -27,13 +29,26 @@ namespace MicroRabbit.Infra.Bus
 
         public RabbitMQBus(
             IMediator mediator,
-            IServiceScopeFactory serviceScopeFactory)
+            IServiceScopeFactory serviceScopeFactory,
+            IOptions<RabbitMQSettings> options)
         {
             _mediator = mediator;
             _serviceScopeFactory = serviceScopeFactory;
+            _settings = options.Value;
 
             _handlers = new Dictionary<string, List<Type>>();
             _eventTypes = new Dictionary<string, Type>();
+        }
+
+        private ConnectionFactory CreateConnectionFactory()
+        {
+            return new ConnectionFactory
+            {
+                HostName = _settings.HostName,
+                Port = _settings.Port,
+                UserName = _settings.UserName,
+                Password = _settings.Password
+            };
         }
 
         // Send Command through MediatR
@@ -47,10 +62,7 @@ namespace MicroRabbit.Infra.Bus
         public async Task Publish<T>(T @event)
             where T : Event
         {
-            var factory = new ConnectionFactory
-            {
-                HostName = "localhost"
-            };
+            var factory = CreateConnectionFactory();
 
             await using var connection =
                 await factory.CreateConnectionAsync();
@@ -62,7 +74,7 @@ namespace MicroRabbit.Infra.Bus
 
             await channel.QueueDeclareAsync(
                 queue: eventName,
-                durable: false,
+                durable: true,
                 exclusive: false,
                 autoDelete: false,
                 arguments: null);
@@ -110,10 +122,7 @@ namespace MicroRabbit.Infra.Bus
         private async Task StartBasicConsume<T>()
             where T : Event
         {
-            var factory = new ConnectionFactory
-            {
-                HostName = "localhost"
-            };
+            var factory = CreateConnectionFactory();
 
             var connection = await factory.CreateConnectionAsync();
             var channel = await connection.CreateChannelAsync();
@@ -122,7 +131,7 @@ namespace MicroRabbit.Infra.Bus
 
             await channel.QueueDeclareAsync(
                 queue: eventName,
-                durable: false,
+                durable: true,
                 exclusive: false,
                 autoDelete: false,
                 arguments: null);

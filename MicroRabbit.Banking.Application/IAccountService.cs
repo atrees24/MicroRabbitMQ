@@ -9,6 +9,6 @@ namespace MicroRabbit.Banking.Application
     public interface IAccountService
     {
         IEnumerable<Account> GetAccounts();
-       
+        Task Transfer(AccountTransfer accountTransfer);
     }
 }

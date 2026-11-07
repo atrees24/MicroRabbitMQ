@@ -1,5 +1,6 @@
 
 using MicroRabbit.Banking.Data.Context;
+using MicroRabbit.Infra.Bus;
 using MicroRabbit.Infra.IoC;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,9 @@ namespace MicroRabbit.Banking.Api
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            builder.Services.Configure<RabbitMQSettings>(
+                builder.Configuration.GetSection("RabbitMQ"));
 
             // Add Controllers
             builder.Services.AddControllers();
