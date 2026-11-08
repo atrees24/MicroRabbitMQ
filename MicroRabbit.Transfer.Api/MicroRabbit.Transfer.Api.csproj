@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>MicroRabbit.Transfer.Api-9d870b69-88b6-46ce-98c9-f1f9a2c2eb54</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

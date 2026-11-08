@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿
+using MediatR;
 using MicroRabbit.Domain.Core.Bus;
 using MicroRabbit.Domain.Core.Commands;
 using MicroRabbit.Domain.Core.Events;
@@ -8,7 +9,6 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -17,22 +17,18 @@ namespace MicroRabbit.Infra.Bus
 {
     public sealed class RabbitMQBus : IEventBus
     {
-        private readonly IMediator _mediator;
         private readonly Dictionary<string, List<Type>> _handlers;
         private readonly Dictionary<string, Type> _eventTypes;
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly RabbitMQSettings _settings;
 
-        // Keep connections and channels alive while consumers are running
         private readonly List<IConnection> _connections = new();
         private readonly List<IChannel> _channels = new();
 
         public RabbitMQBus(
-            IMediator mediator,
             IServiceScopeFactory serviceScopeFactory,
             IOptions<RabbitMQSettings> options)
         {
-            _mediator = mediator;
             _serviceScopeFactory = serviceScopeFactory;
             _settings = options.Value;
 
@@ -52,10 +48,16 @@ namespace MicroRabbit.Infra.Bus
         }
 
         // Send Command through MediatR
-        public Task SendCommand<T>(T command)
+        public async Task<bool> SendCommand<T>(T command)
             where T : Command
         {
-            return _mediator.Send(command);
+            await using var scope =
+                _serviceScopeFactory.CreateAsyncScope();
+
+            var mediator = scope.ServiceProvider
+                .GetRequiredService<IMediator>();
+
+            return await mediator.Send(command);
         }
 
         // Publish Event to RabbitMQ
@@ -106,7 +108,6 @@ namespace MicroRabbit.Infra.Bus
                 _handlers.Add(eventName, new List<Type>());
             }
 
-            // Check if handler is already registered
             if (_handlers[eventName].Contains(handlerType))
             {
                 throw new ArgumentException(
@@ -148,7 +149,6 @@ namespace MicroRabbit.Infra.Bus
                 autoAck: false,
                 consumer: consumer);
 
-            // Keep references alive
             _connections.Add(connection);
             _channels.Add(channel);
         }
@@ -167,14 +167,12 @@ namespace MicroRabbit.Infra.Bus
             {
                 await ProcessEvent(eventName, message);
 
-                // Acknowledge message after successful processing
                 await channel.BasicAckAsync(
                     deliveryTag: e.DeliveryTag,
                     multiple: false);
             }
             catch (Exception)
             {
-                // Reject and requeue message if processing fails
                 await channel.BasicNackAsync(
                     deliveryTag: e.DeliveryTag,
                     multiple: false,
@@ -190,7 +188,8 @@ namespace MicroRabbit.Infra.Bus
             if (!_handlers.ContainsKey(eventName))
                 return;
 
-            using var scope = _serviceScopeFactory.CreateScope();
+            using var scope =
+                _serviceScopeFactory.CreateScope();
 
             var subscriptions = _handlers[eventName];
 
@@ -206,13 +205,16 @@ namespace MicroRabbit.Infra.Bus
                     eventType);
 
                 if (@event == null)
+                {
                     throw new InvalidOperationException(
                         $"Could not deserialize event: {eventName}");
+                }
 
                 var handlerInterface = typeof(IEventHandler<>)
                     .MakeGenericType(eventType);
 
-                var handleMethod = handlerInterface.GetMethod("Handle");
+                var handleMethod =
+                    handlerInterface.GetMethod("Handle");
 
                 var task = (Task)handleMethod!.Invoke(
                     handler,
@@ -221,7 +223,5 @@ namespace MicroRabbit.Infra.Bus
                 await task;
             }
         }
-
-     
     }
 }
